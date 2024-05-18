@@ -5,6 +5,6 @@ setup(
     packages=find_packages(),
     version='0.1.0',
     description='Analyze data from a study of using visualizations for statistical inference.',
-    author='Rodney Murray',
+    author=['Rodney Murray', 'Brendon Stanley'],
     license='MIT',
 )
