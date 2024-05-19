@@ -1,0 +1,390 @@
+---
+title: "Brendon_EDA"
+author: "Brendon Stanley"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+Exec Summary
+
+- Centroid of "types" (triangles, big cirlces, and red circles) appear to relate to ability to predict correct centroid quadrant.
+- More "types" in the correct quadrant helps to predict correct quadrant.
+- Decent amount of per-person variability. Mixed model would be good.
+- Appears on average, as `howManyCorr` increases so does odds of correct prediction
+- The further the true centroid is from the center, the easier to predict the corect quadrent
+- Visual inspection for longitudinal effect ... inconclusive. Prob good to check though.
+
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(zoo)
+```
+
+```{r}
+df = read.csv("/Users/brendo/repos/CSU/Visual-Inference/src/data/WittData.csv", header=TRUE, sep=",")
+
+df$isCorrect = df$resp == df$corrQuad
+df$subj = as.factor(df$subj)
+df$currImg = as.factor(df$currImg)
+df$resp = as.factor(df$resp)
+df$corrQuad = as.factor(df$resp)
+df$isColSame = as.logical(df$isColSame)
+df$isPulseSame = as.logical(df$isPulseSame)
+df$isSizeSame = as.logical(df$isSizeSame)
+```
+
+# Check Total Correct
+
+```{r}
+sum(df$isCorrect) / length(df$isCorrect)
+```
+
+# Check Total Correct when `isColSame` is TRUE
+
+```{r}
+sum(df[df$isColSame == TRUE, ]$isCorrect) / length(df[df$isColSame == TRUE, ]$isCorrect)
+```
+
+# Check Total Correct when `isPulseSame` is TRUE
+
+```{r}
+sum(df[df$isColSame == TRUE, ]$isPulseSame) / length(df[df$isColSame == TRUE, ]$isPulseSame)
+```
+
+# Check Total Correct when `isSizeSame` is TRUE
+
+```{r}
+sum(df[df$isColSame == TRUE, ]$isSizeSame) / length(df[df$isColSame == TRUE, ]$isSizeSame)
+```
+
+# How many plots did each subject look at? 
+
+```{r}
+subjs = levels(df$subj)
+
+for (i in 1:length(subjs)){
+  subject_num = subjs[i]
+  subject_df = df[df$subj == subject_num, ]
+  print(paste(subject_num, nrow(subject_df)))
+}
+```
+
+... I just can't do 52*200 in my head ... duch this is correct.
+
+# Now lets look at scores for each subject
+
+```{r}
+subjs = levels(df$subj)
+
+score_vector = c()
+
+for (i in 1:length(subjs)){
+  subject_num = subjs[i]
+  subject_df = df[df$subj == subject_num, ]
+  
+  overall_score = sum(subject_df$isCorrect) / length(subject_df$isCorrect)
+  
+  score_is_col = sum(subject_df[subject_df$isColSame == TRUE, ]$isCorrect) / length(subject_df[subject_df$isColSame == TRUE, ]$isCorrect)
+  
+  score_is_pulse = sum(subject_df[subject_df$isPulseSame == TRUE, ]$isCorrect) / length(subject_df[subject_df$isPulseSame == TRUE, ]$isCorrect)
+  
+  score_is_size = sum(subject_df[subject_df$isSizeSame == TRUE, ]$isCorrect) / length(subject_df[subject_df$isSizeSame == TRUE, ]$isCorrect)
+  
+  score_zero_correct = sum(subject_df[subject_df$howManyCorr == 0, ]$isCorrect) / length(subject_df[subject_df$howManyCorr == 0, ]$isCorrect)
+
+  score_one_correct = sum(subject_df[subject_df$howManyCorr == 1, ]$isCorrect) / length(subject_df[subject_df$howManyCorr == 1, ]$isCorrect)
+  
+  score_two_correct = sum(subject_df[subject_df$howManyCorr == 2, ]$isCorrect) / length(subject_df[subject_df$howManyCorr == 2, ]$isCorrect)
+  
+  score_three_correct = sum(subject_df[subject_df$howManyCorr == 3, ]$isCorrect) / length(subject_df[subject_df$howManyCorr == 3, ]$isCorrect)
+  
+  score_vector = c(score_vector, overall_score, score_is_col, score_is_pulse, score_is_size, score_zero_correct, score_one_correct, score_two_correct, score_three_correct)
+
+}
+
+score_df = data.frame(
+  score = score_vector,
+  score_type = rep(c("overall", "isColSame", "isSizeSame", "isPulseSame", "howManyCorr=0", "howManyCorr=1", "howManyCorr=2", "howManyCorr=3"), length(subjs)),
+  subject = rep(1:length(subjs), each = 8)
+)
+
+score_df$score_type = as.factor(score_df$score_type)
+score_df$subject = as.factor(score_df$subject)
+```
+
+# Score by Score Type
+
+```{r}
+ggplot(score_df, aes(x = score_type, y = score, fill = score_type)) + 
+  geom_boxplot(outlier.shape = NA, alpha = 0.6) +
+  geom_jitter(width = 0.2, size = 0.8, alpha = 0.5) +
+  scale_fill_brewer(palette = "Set1") +
+  labs(
+    x = NULL,
+    y = "Percentage Correct", 
+    title = "Score by Score Type",
+    fill = "Score Type"
+  ) +
+  theme_minimal(base_size = 15) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.title.x = element_blank(),  # Remove x-axis title
+    axis.text.x = element_blank(),  # Remove x-axis text
+    axis.ticks.x = element_blank(),  # Remove x-axis ticks
+    axis.title.y = element_text(face = "bold")
+  )
+```
+
+# Per Person Effect of `howManycorr`
+
+```{r}
+subjs = levels(df$subj)
+
+store = c()
+
+for (i in 1:length(subjs)){
+  subject_num = subjs[i]
+  subject_df = df[df$subj == subject_num, ]
+  
+  s_df_hmc0 = subject_df[subject_df$howManyCorr == 0, ]$isCorrect
+  s_df_hmc1 = subject_df[subject_df$howManyCorr == 1, ]$isCorrect
+  s_df_hmc2 = subject_df[subject_df$howManyCorr == 2, ]$isCorrect
+  s_df_hmc3 = subject_df[subject_df$howManyCorr == 3, ]$isCorrect
+  
+  hmc0 = sum(s_df_hmc0) / length(s_df_hmc0)
+  hmc1 = sum(s_df_hmc1) / length(s_df_hmc1)
+  hmc2 = sum(s_df_hmc2) / length(s_df_hmc2)
+  hmc3 = sum(s_df_hmc3) / length(s_df_hmc3)
+  
+  store = c(store, hmc0, hmc1, hmc2, hmc3)
+}
+
+hmc_df = data.frame(
+  score = store,
+  hmc = rep(0:3, length(subjs)),
+  subject = rep(1:length(subjs), each = 4)
+)
+
+hmc_df$subject = as.factor(hmc_df$subject)
+
+```
+
+```{r}
+
+ggplot(hmc_df, aes(x=hmc, y=score, color=subject)) +
+  geom_line(size=0.5) +
+  # scale_color_brewer(palette = "Set1") +
+  theme_minimal(base_size = 12) +
+    labs(
+    x = "How Many Correct Value",
+    y = "Score for HMC", 
+    title = "Correct Quadrent Score by HMC Value per Subject",
+  ) +
+  theme(
+  legend.position = "none",  # Remove legend if it becomes too cluttered
+  plot.title = element_text(hjust = 0.5, face = "bold"),
+  axis.title.x = element_text(face = "bold"), 
+  axis.title.y = element_text(face = "bold")
+  )
+```
+
+# eCDF of Score by Type
+
+```{r}
+ggplot(score_df, aes(x = score, color = score_type, fill = score_type)) + 
+  stat_ecdf(geom = "step", size = 1, alpha = 0.7) +
+  labs(
+    x = "Score", 
+    y = "ECDF", 
+    title = "eCDF of Score by Score Type",
+    fill = "Score Type",
+    color = "Score Type"
+  ) +
+  scale_fill_brewer(palette = "Set1") +
+  scale_color_brewer(palette = "Set1") +
+  theme_minimal(base_size = 15) +
+  theme(
+    legend.position = "right",
+    legend.title = element_text(face = "bold"),
+    legend.text = element_text(size = 12),
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 20),
+    axis.title.x = element_text(face = "bold", size = 16),
+    axis.title.y = element_text(face = "bold", size = 16),
+    axis.text = element_text(size = 14)  # Increase axis text size
+  )
+```
+
+# Effects of `distToMiddle` on Overall Score
+
+```{r}
+q = quantile(df$distToMiddle, c(0, 0.1, .2, .3, .4, .5, .6, .7, .8, .9, 1))
+
+index = c()
+score = c()
+
+for (i in 2:length(q)-1){
+  lower = q[i]
+  upper = q[i+1]
+  
+  temp = df[df$distToMiddle > lower & df$distToMiddle <= upper, ]$isCorrect
+  t_score = sum(temp) / length(temp)
+  index = c(index, i)
+  score = c(score, t_score)
+}
+
+dtm_score_df = data.frame(
+  score = score,
+  index = index
+)
+q
+```
+
+```{r}
+
+ggplot(dtm_score_df, aes(x=index, y=score)) +
+  geom_line() +
+  theme_minimal()
+```
+
+# Rolling Mean
+
+```{r}
+subjs = levels(df$subj)
+smoothing_chunck = 50
+samples_per_subj = 200 
+smoothing_samples = (samples_per_subj - smoothing_chunck) + 1
+
+store = c()
+
+for (i in 1:length(subjs)){
+  subject_num = subjs[i]
+  sorted_df = df[df$subj == subject_num, ] %>% arrange(X)
+  is_correct = sorted_df$isCorrect
+  
+  
+  temp_store = c()
+  
+  for (j in 1:smoothing_samples) {
+    roll_chunck = sum(is_correct[j:(j+9)]) / smoothing_chunck
+    temp_store = c(temp_store, roll_chunck)
+  }
+  
+  store = c(store, temp_store)
+  
+}
+
+rolling_mean_df = data_frame(
+  rolling_mean = store,
+  sample = rep(1:smoothing_samples, length(subjs)),
+  subject = rep(1:length(subjs), each = smoothing_samples)
+)
+
+# rolling_mean_df$sample = as.factor(rolling_mean_df$sample)
+# rolling_mean_df$subject = as.factor(rolling_mean_df$subject)
+```
+
+```{r}
+df_small = rolling_mean_df
+df_small$subject = as.factor(df_small$subject)
+
+ggplot(df_small, aes(x=sample, y=rolling_mean, group=subject)) +
+  geom_line(size=0.15) +
+  theme_minimal(base_size = 12) +
+    labs(
+    x = "Time",
+    y = "Rolling Score", 
+    title = "Spageti Plot of Rolling Average Score per Subject Over Time",
+  ) +
+  theme(
+  legend.position = "none",  # Remove legend if it becomes too cluttered
+  plot.title = element_text(hjust = 0.5, face = "bold"),
+  axis.title.x = element_text(face = "bold"), 
+  axis.title.y = element_text(face = "bold")
+  )
+```
+
+- This was really not helpful.
+
+Trying again but looking at average for discrete 25 sample chunks. So % right in 1-25, 26-50, etc
+
+
+```{r}
+subjs = levels(df$subj)
+smoothing_chunck = 25  # Must be a factor of <samples_per_subj>
+samples_per_subj = 200 
+smoothing_samples = samples_per_subj / smoothing_chunck
+
+store = c()
+
+for (i in 1:length(subjs)){
+  subject_num = subjs[i]
+  sorted_df = df[df$subj == subject_num, ] %>% arrange(X)
+  is_correct = sorted_df$isCorrect
+  
+  
+  temp_store = c()
+  
+  for (j in 1:smoothing_samples){
+    chunk = is_correct[(1 + ((j-1) * 25)):(j*25)]
+    t_score = sum(chunk) / smoothing_chunck
+    temp_store = c(temp_store, t_score)
+  }
+
+  store = c(store, temp_store)
+  
+}
+
+rolling_mean_df = data_frame(
+  chunk_mean = store,
+  sample = rep(1:smoothing_samples, length(subjs)),
+  subject = rep(1:length(subjs), each = smoothing_samples)
+)
+```
+
+# Just looking at the first 9 for easy visual
+
+```{r}
+df_small = rolling_mean_df[rolling_mean_df$subject <= 9, ]
+df_small$subject = as.factor(df_small$subject)
+
+ggplot(df_small, aes(x=sample, y=chunk_mean, color=subject)) +
+  geom_line(size=0.5) +
+  scale_color_brewer(palette = "Set1") +
+  theme_minimal(base_size = 12) +
+    labs(
+    x = "Time",
+    y = "Rolling Score", 
+    title = "Spageti Plot of Rolling Average Score per Subject Over Time",
+  ) +
+  theme(
+  legend.position = "none",  # Remove legend if it becomes too cluttered
+  plot.title = element_text(hjust = 0.5, face = "bold"),
+  axis.title.x = element_text(face = "bold"), 
+  axis.title.y = element_text(face = "bold")
+  )
+```
+
+# Okay now all subjs
+
+```{r}
+df_small = rolling_mean_df
+df_small$subject = as.factor(df_small$subject)
+
+ggplot(df_small, aes(x=sample, y=chunk_mean, color=subject)) +
+  geom_line(size=0.5) +
+  # scale_color_brewer(palette = "Set1") +
+  theme_minimal(base_size = 12) +
+    labs(
+    x = "Time",
+    y = "Rolling Score", 
+    title = "Spageti Plot of Rolling Average Score per Subject Over Time",
+  ) +
+  theme(
+  legend.position = "none",  # Remove legend if it becomes too cluttered
+  plot.title = element_text(hjust = 0.5, face = "bold"),
+  axis.title.x = element_text(face = "bold"), 
+  axis.title.y = element_text(face = "bold")
+  )
+```
+
