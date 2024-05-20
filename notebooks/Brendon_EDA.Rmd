@@ -22,7 +22,7 @@ library(zoo)
 ```
 
 ```{r}
-df = read.csv("/Users/brendo/repos/CSU/Visual-Inference/src/data/WittData.csv", header=TRUE, sep=",")
+df = read.csv("/Users/brendo/repos/CSU/Visual-Inference/src/data/Wills_data_corrected.csv", header=TRUE, sep=",")
 
 df$isCorrect = df$resp == df$corrQuad
 df$subj = as.factor(df$subj)
