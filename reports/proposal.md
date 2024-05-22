@@ -5,7 +5,7 @@
 * Other details
 
 ## Proposed Methods
-For analysis of the visualization data, the response variable will be a binary categorical value (0/1) indicating of the quadrant was correctly identified as calculated from true quadrant and the identified quadrant provided.  The remaning variables summarized below will be used in a Generalized Linear Mixed Model (GLMM) with the assumption that the response follows a binomial distribution.
+For analysis of the visualization data, the response variable will be a binary categorical value (0/1) indicating if the quadrant was correctly identified by the subject.  The remaining variables summarized below will be used in a Generalized Linear Mixed Model (GLMM) with the assumption that the response follows a binomial distribution.
 
 | Variable Name | Type (continuous/categorical)                           | Effect Type   |
 | ------------- | ------------------------------------------------------- | ------------- |
@@ -19,12 +19,12 @@ For analysis of the visualization data, the response variable will be a binary c
 
 Because the x and y pairs of the individual points which consisted of the images shown to the subject were also provided, additional features may be calculated and examined. Two examples may be: the number of points in the correct quadrant, and the distance to the closest boundary
 
-Assumptions for logistic regresssion models of this nature are difficult to check, however some key checks that can and will be done are:
+Assumptions for logistic regression models are difficult to check, however some key checks that can and will be done are:
 
-* Normality of the estimates of the linear effects via QQ-plots
+* Normality of the estimates of the random effects via QQ-plots
 * Proportions of correct answers for binned values of continuous variables (as shown below) show trends similar to modeled values
 
-Because there are not specific variables of interest to test the effect of, model selection will be used to address the use of overly complex models to enhance interpretability while prioritizing the ability of the model to describe the response. A 5-fold cross validation is proposed to identify the model (or set of variables) with the best average accuracy on the test folds. If a large imbalance is found in the data, adjustments will be made to the metric to account for this.
+Because there are no specific variables of interest to test the effect of, model selection will be used to address the use of overly complex models to enhance interpretability while prioritizing the ability of the model to describe the response. A 5-fold cross validation is proposed to identify the model (or set of variables) with the best average accuracy on the test folds. If a large imbalance is found in the data, adjustments will be made to the metric to account for this.
 
 The following results will be reported as final deliverables:
 
@@ -34,5 +34,11 @@ The following results will be reported as final deliverables:
 ## Summary Statistics and Exploratory Analysis
 * Counts of true quadrants (show large number in quadrant B)
 * Box plots for subject accuracy
-* Binned variables showing approximate probabilities
-* etc.
+
+Below is a plot demonstrating how the centroid for many of the images was identified as belonging to Quadrant B resulting in a large imbalance and need for potential correction.
+
+<img src="./figures/Provided_Quadrant.png" alt="Provided Quadrant Mismatch" style="zoom:50%;" />
+
+Below are some plots of numerical variables which have been binned for the continuous cases to illustrate how the proportion correct may change over different values of each variable. 
+
+<img src="./figures/approximate_proportions.png" alt="Approximate proportions for binned values of continuous variables" style="zoom:50%;" />
