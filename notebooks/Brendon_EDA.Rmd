@@ -18,11 +18,15 @@ Exec Summary
 ```{r}
 library(ggplot2)
 library(dplyr)
-library(zoo)
+library(reshape2)
+library(dplyr)
+library(tidyr)
+library(knitr)
+library(kableExtra)
 ```
 
 ```{r}
-df = read.csv("/Users/brendo/repos/CSU/Visual-Inference/src/data/Wills_data_corrected.csv", header=TRUE, sep=",")
+df = read.csv("/Users/brendo/repos/CSU/Visual-Inference/src/data/WittData.csv", header=TRUE, sep=",")
 
 df$isCorrect = df$resp == df$corrQuad
 df$subj = as.factor(df$subj)
@@ -387,4 +391,43 @@ ggplot(df_small, aes(x=sample, y=chunk_mean, color=subject)) +
   axis.title.y = element_text(face = "bold")
   )
 ```
+
+```{r}
+
+df = read.csv("/Users/brendo/repos/CSU/Visual-Inference/src/data/WittData.csv", header=TRUE, sep=",")
+
+a_true = nrow(df[df$corrQuad == "A", ])
+b_true = nrow(df[df$corrQuad == "B", ])
+c_true = nrow(df[df$corrQuad == "C", ])
+d_true = nrow(df[df$corrQuad == "D", ])
+
+a_guessed = nrow(df[df$resp == "A", ])
+b_guessed = nrow(df[df$resp == "B", ])
+c_guessed = nrow(df[df$resp == "C", ])
+d_guessed = nrow(df[df$resp == "D", ])
+
+df_chart = data.frame(
+  quad = c("A", "B", "C", "D"),
+  true_quad = c(a_true, b_true, c_true, d_true),
+  guessed_quad = c(a_guessed, b_guessed, c_guessed, d_guessed)
+)
+
+df_long = df_chart %>%
+  pivot_longer(cols = c(true_quad, guessed_quad), names_to = "type", values_to = "value")
+
+summary_df = df_long %>%
+  mutate(type = recode(type, true_quad = "True Quad", guessed_quad = "Guessed Quad")) %>%
+  pivot_wider(names_from = quad, values_from = value)
+
+kable(summary_df, "latex", caption = "True and Guessed Quad Values", align = 'r', booktabs = TRUE, col.names = c('Type', 'A', 'B', 'C', 'D')) %>%
+  kable_styling(latex_options = c("striped", "hold_position"), font_size = 12) %>%
+  column_spec(1, bold = TRUE, width = "2cm") %>%
+  column_spec(2:5, width = "3cm") %>%
+  row_spec(0, bold = TRUE, color = "white", background = "#666666")
+```
+
+
+
+
+
 
