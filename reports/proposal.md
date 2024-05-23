@@ -9,7 +9,7 @@
 <p style="text-indent: 40px;">
     Hurricane Ian swept through the Hurricane Belt in 2022 leaving behind 149 deaths in Florida
 and an estimated $113 Billion USD in damages (Florida Department of Law Enforcement; National Centers for Environmental Information).
-Concerns were raised regarding the readability of the hurricane forecast maps and the "cone" used to predict the path of the hurricane (Dance and Ajasa).
+Concerns were raised regarding the readability of the hurricane forecast maps and the "cone" that is used to show the predicted path path of the hurricane (Dance and Ajasa).
 News outlets have suggested that the cone is misleading and that the public may not understand the information presented (Pulver and Doyle).
 This project aims to provide background to better understand how vision works and how to produce informative data visualizations.
 The project will be a stepping stone for continued research of data visualization and how to communicate hurricane forecast data effectively.
@@ -17,23 +17,10 @@ The project will be a stepping stone for continued research of data visualizatio
 
 <p style="text-indent: 40px;">
     Data for this project was collected in an experiment of 52 subjects enrolled in psychology 100 at CSU. Subjects were shown an image of dots via an online survey (see figure one) and 
-asked to select the quadrant where the centroid of the dots was located (see figure two); i.e., where is the middle of the dots? Each image was show to the subject for less than a second before the
-screen would change. Asking the subject to select the quadrant the centroid of the dots was in. The subjects' response was recorded along with metadata about the image. Each subject was 
+asked to select the quadrant where the centroid of the dots was located (see figure two); i.e., where is the middle of the dots? Each image was shown for less than one second and the 
+subject was asked to select which quadrant the centroid of the dots was in. The subjects' response was recorded along with metadata about the image. Each subject was 
 randomly shown 200 images from a pool of 400 images. For each image there were 90 dots total with 30 red dots, 30 big dots, and 30 dots with black outlines.
 </p>
-
-The data were recorded in a CSV file with the following columns:
-
-- `currImage`: the image ID (factor: 1-400)
-- `subjID`: the subject ID (factor: 1-52)
-- `resp`: subject response quadrant (factor: A, B, C, D)
-- `corrQuad`: the correct quadrant (factor: A, B, C, D)
-- `distToMiddle`: the distance from the centroid to the center of the screen (numeric)
-- `meanSD`: the standard deviation of all the dots (numeric)
-- `isColSame`: whether the quadrant for the mean of the red dots is the same quadrant as the mean of all the dots (boolean: 0, 1)
-- `isSizeSame`: whether the quadrant for the mean of the big dots is the same quadrant as the mean of all the dots (boolean: 0, 1)
-- `isPulseSame`: whether the quadrant for the mean of the dots with black outlines is the same quadrant as the mean of all the dots (boolean: 0, 1)
-- `howManyCorr`: how many of the special groups (red, big, black outlines) have their mean in the same quadrant as the quadrant for the full group of dots (factor: 0-3) 
 
 ![Figure 1: Experiment Visual Stimulus](../references/figures/image_dots_example.png "Figure 3: Experiment Visual Stimulus")
 
@@ -46,10 +33,6 @@ The data were recorded in a CSV file with the following columns:
 <p align="center">
   Figure 2: Experiment Centroid Quadrant Options
 </p>
-
-Explain the study design. Include details such as sample size, whether this is an observational
-study or experiment, etc.
-Include other details as needed.
 
 ## Proposed Methods
 * Response and predictor variables
