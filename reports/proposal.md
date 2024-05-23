@@ -98,7 +98,7 @@ but so does the variability. Model selection will need to investigate this furth
 
 Figure five demonstrates how the centroid for many of the images was identified as belonging to Quadrant B resulting in a large imbalance and need for potential correction.
 
-<img src="./figures/Provided_Quadrant.png" alt="Provided Quadrant Mismatch" style="zoom:50%;" />
+<img src="./figures/Provided_Quadrant.png" alt="Provided Quadrant Mismatch" style="zoom: 50%;" />
 
 <p align="center">
   Figure 5: Provided Quadrants
@@ -106,7 +106,7 @@ Figure five demonstrates how the centroid for many of the images was identified 
 
 Figure six shows averages of binned values for numerical variables demonstrate how the proportion of correct responses may change for different values of that numerical variable. 
 
-<img src="./figures/approximate_proportions.png" alt="Approximate proportions for binned values of continuous variables" style="zoom:50%;" />
+<img src="./figures/approximate_proportions.png" alt="Approximate proportions for binned values of continuous variables" style="zoom: 60%;" />
 
 <p align="center">
   Figure 6: Approximate Proportions
