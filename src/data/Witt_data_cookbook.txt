@@ -1,0 +1,12 @@
+currImg = display that was shown
+subj = subject ID
+resp = quadrant that was selected (A-D)
+corrQuad = quandrant for which mean of the dots was located (A-D)
+distToMiddle = the distance from the mean of the dots to the center of all 4 quadrants
+meanSD - the standard deviation of all the dots
+isColSame - whether the quadrant for the mean of the red dots is the same quadrant as the mean of all the dots
+isSizeSame - whether the quadrant for the mean of the bigdots is the same quadrant as the mean of all the dots
+isPulseSame - whether the quadrant for the mean of the dots with black outlines is the same quadrant as the mean of all the dots
+howManyCorr - how many of the special groups (red, big, black outlines) have their mean in the same quadrant as the quadrant for the full group of dots.
+
+Dots were placed on a grid from 0 - 100 (arbitrary units).  
