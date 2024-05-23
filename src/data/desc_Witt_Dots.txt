@@ -1,0 +1,10 @@
+Witt_Dots.csv contains information about each individual dot in each of the 400 displays
+
+Each display has 90 dots.
+
+Of these 90 dots, there are 30 that are red, 30 that are big, and 30 that have an outline.  The type of dot is indicated by the column called "cond", which is either size, color, or pulse.  Pulse indicates the point has an outline.
+
+Each dot also has:
+- image number (currImg)
+- x location (x)
+- y location (y)
