@@ -30,7 +30,7 @@ The project will be a stepping stone for continued research of data visualizatio
 Data for this project was collected in an experiment of 52 subjects enrolled in psychology 100 at CSU. Subjects were shown an image of dots via an online survey (see figure one) and 
 asked to select the quadrant where the centroid of the dots was located (see figure two); i.e., where is the middle of the dots? Each image was shown for less than one second and the 
 subject was asked to select which quadrant the centroid of the dots was in. The subjects' response was recorded along with metadata about the image. Subject were 
-randomly shown 200 images from a pool of 400. For each image contained 90 dots total with 30 red dots, 30 big dots, and 30 dots with black outlines.
+randomly shown 200 images from a pool of 400. Each image contained 90 dots total with 30 red dots, 30 big dots, and 30 dots with black outlines.
 
 \begin{figure}[h]
   \centering
