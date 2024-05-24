@@ -8,6 +8,8 @@ format: html
 library(tidyverse)
 library(lme4)
 library(broom)
+library(MuMIn)
+library(broom.mixed)
 ```
 
 # Data Loading and Processing
@@ -118,4 +120,34 @@ ggplot(summaries, aes(mean_value, prop_correct)) +
 ```
 
 # Modeling
+
+```{r}
+model <- glmer(correct ~ distToMiddleREV + n_in_quadrant + distToNearest + (1|subj) + (1|currImg), data = full_df, family = binomial)
+summary(model)
+```
+
+```{r}
+# calculate a psuedo R^2 for the glmer model
+r.squaredGLMM(model)
+```
+
+
+```{r}
+model_pred <- augment(model) %>% 
+  mutate(
+    pred_prob = exp(.fitted) / (1 + exp(.fitted)),
+    pred_correct = pred_prob > 0.5
+  )
+head(model_pred)
+```
+
+```{r}
+model_pred %>% 
+  mutate(
+    model_correct = correct == pred_correct
+  ) %>% 
+  summarize(
+    prop_correct = mean(model_correct)
+  )
+```
 
