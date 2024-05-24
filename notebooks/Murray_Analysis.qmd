@@ -1,0 +1,121 @@
+---
+title: "Visual Analysis"
+author: "Rodney Murray"
+format: html
+---
+
+```{r}
+library(tidyverse)
+library(lme4)
+library(broom)
+```
+
+# Data Loading and Processing
+
+
+## Load Data
+```{r}
+df <- read.csv('../src/data/WittData_AHRev052324.csv')
+dots <- read.csv('../src/data/Witt_Dots.csv')
+```
+
+## Processing
+Calculate which quadrant each dot is in
+```{r}
+dots <- dots %>% mutate(
+  quadrant = case_when(
+  x < 50 & y >= 50 ~ 'A',
+  x >= 50 & y >= 50 ~ 'B',
+  x < 50 & y < 50 ~ 'C',
+  x >= 50 & y < 50 ~ 'D',
+  )
+)
+```
+
+Calculate the mean values for x and y and which quadrant the centroid is in
+```{r}
+mean_dots <- dots %>% 
+  group_by(currImg) %>% 
+  summarise(meanx = mean(x), meany = mean(y)) %>% 
+  mutate(
+      mean_quadrant = case_when(
+        meanx < 50 & meany >= 50 ~ 'A',
+        meanx >= 50 & meany >= 50 ~ 'B',
+        meanx < 50 & meany < 50 ~ 'C',
+        meanx >= 50 & meany < 50 ~ 'D',
+    )
+  )
+```
+
+Join the centroid and associated quadrant back to the dots
+```{r}
+full_dots <- left_join(dots, mean_dots, by = 'currImg') %>% 
+  mutate(
+    in_mean_quadrant = quadrant == mean_quadrant
+    )
+head(full_dots)
+
+# Calculate the number of dots in the same quadrant as the centroid
+mean_full_dots <- full_dots %>% 
+  group_by(currImg) %>% 
+  summarise(n_in_quadrant = sum(in_mean_quadrant))
+head(mean_full_dots)
+```
+
+Join the dot data back with the response data
+```{r}
+full_df <- left_join(df, mean_full_dots, by = 'currImg') %>% 
+  mutate(
+    correct = resp == corrQuadREV,
+    distToNearest = pmin(abs(meanx -50), abs(meany - 50))
+    )
+full_df %>% head()
+```
+
+A Pretty plot!
+```{r}
+ggplot(df, aes(meanx, meany, color=corrQuadREV)) +
+  geom_point()
+```
+
+# EDA
+
+```{r}
+cols <- c('distToNearest', 'distToMiddleREV', 'n_in_quadrant')
+
+
+df_summary <- full_df %>% 
+  mutate(dist_bin = cut(distToMiddleREV, breaks = 20)) %>% 
+  group_by(dist_bin) %>%
+  summarise(
+    prop_correct = mean(correct),
+    mea_dist = mean(distToMiddleREV)
+    )
+
+# Iterate over each column in cols and calculate the proportion correct for binned values of each column
+summaries <- data.frame()
+for (i in 1:length(cols)) {
+  col <- cols[i]
+  df_summary <- full_df %>% 
+    mutate(col_bin = cut(!!sym(col), breaks = 15)) %>% 
+    group_by(col_bin) %>%
+    summarise(
+      prop_correct = mean(correct),
+      mean_value = mean(!!sym(col)),
+      col_name = col
+    )
+  summaries <- bind_rows(summaries, df_summary)
+}
+head(summaries)
+```
+
+
+```{r}
+ggplot(summaries, aes(mean_value, prop_correct)) +
+  facet_wrap(~col_name, scales='free_x', ncol=2) +
+  geom_point() +
+  theme_minimal()
+```
+
+# Modeling
+
