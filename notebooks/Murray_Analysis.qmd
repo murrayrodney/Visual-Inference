@@ -64,17 +64,58 @@ mean_full_dots <- full_dots %>%
 head(mean_full_dots)
 ```
 
+Calculate if the special groups are in the same quadrant as the mean of all
+```{r}
+group_dots <- dots %>% 
+  group_by(currImg, cond) %>% 
+  summarize(meanx=mean(x), meany=mean(y)) %>% 
+  mutate(
+    group_quadrant = case_when(
+      meanx < 50 & meany >= 50 ~ 'A',
+      meanx >= 50 & meany >= 50 ~ 'B',
+      meanx < 50 & meany < 50 ~ 'C',
+      meanx >= 50 & meany < 50 ~ 'D',
+    )
+  )%>% 
+  pivot_wider(
+    id_cols=currImg,
+    names_from=cond,
+    values_from=group_quadrant
+  )
+group_dots
+```
+
+
+
 Join the dot data back with the response data
 ```{r}
 full_df <- left_join(df, mean_full_dots, by = 'currImg') %>% 
+  left_join(group_dots, by='currImg') %>%
   mutate(
     correct = resp == corrQuadREV,
-    distToNearest = pmin(abs(meanx -50), abs(meany - 50))
+    distToNearest = pmin(abs(meanx -50), abs(meany - 50)),
+    isColSameREV = as.numeric(color == corrQuadREV),
+    isSizeSameREV = as.numeric(size == corrQuadREV),
+    isPulseSameREV = as.numeric(pulse == corrQuadREV)
     )
-full_df %>% head()
+full_df %>% head() %>% select(isColSame, isColSameREV)
 ```
 
-A Pretty plot!
+
+Interestingly enough it seems that the special groups were correctly calculated
+```{r}
+full_df %>% 
+  mutate(
+    color = isColSame == isColSameREV,
+    size = isSizeSame == isSizeSameREV,
+    pulse = isPulseSame == isPulseSameREV
+    ) %>% 
+  select(color, size, pulse, isColSameREV, isSizeSameREV, isPulseSameREV) %>% 
+  summary()
+```
+
+
+Plot our data to check that we correctly identified the quadrants for the centroids
 ```{r}
 ggplot(df, aes(meanx, meany, color=corrQuadREV)) +
   geom_point()
@@ -121,33 +162,134 @@ ggplot(summaries, aes(mean_value, prop_correct)) +
 
 # Modeling
 
+I left out `howManyCorr` becuase of collinearity, and the currImg due to convergence issues.
+
+Not too worried about currImg being out since we have other variables which should help describe the data reasonbly well.
+
 ```{r}
-model <- glmer(correct ~ distToMiddleREV + n_in_quadrant + distToNearest + (1|subj) + (1|currImg), data = full_df, family = binomial)
+formula <- correct ~ 
+  distToMiddleREV + 
+  n_in_quadrant +
+  meanSD +
+  distToNearest + 
+  isColSame +
+  isSizeSame +
+  isPulseSame +
+  # howManyCorr +
+  # (1|currImg) +
+  (1|subj)
+
+model <- glmer(
+  formula=formula,
+  data = full_df,
+  family = binomial,
+  )
 summary(model)
 ```
 
+
+## Model Selection
+
+### Stepwise - Forward
+
+```{r}
+base_model <- glmer(
+  correct ~ isColSame + isSizeSame + isPulseSame + (1|subj),
+  data = full_df,
+  family = binomial
+  )
+base_model
+```
+
+
+```{r}
+# Apparently this doesn't work but "dredge" does? 
+# scope = list(lower=base_model)
+# forward_model <- step(model, scope=scope, direction='forward')
+```
+
+
+### Dredge
+
+```{r}
+options(na.action='na.fail')
+dredge_res <- dredge(model, fixed=c('isColSame', 'isPulseSame', 'isSizeSame'))
+dredge_res
+```
+
+
+```{r}
+best_model <- get.models(dredge_res, 1)[[1]]
+summary(best_model)
+```
+
+```{r}
+# Get a sample of the full dataset full_df and fit a model, use this to test out the confidence interval algorithms.
+sample_index <- sample(1:nrow(full_df), 1000, replace=F)
+sample_df <- full_df[sample_index,]
+
+sample_model <- glmer(
+  correct ~ distToMiddleREV + distToNearest + n_in_quadrant + isColSame + isSizeSame + isPulseSame + (1|subj), 
+  data = sample_df, 
+  family = binomial
+  )
+summary(sample_model)
+```
+
+```{r}
+wald_confints <- tidy(best_model, conf.int=T, conf.method='Wald')
+wald_confints
+
+```
+
+
+```{r}
+conf_plot <- wald_confints %>% filter(!(term %in% c('(Intercept)', 'sd__(Intercept)')))
+ggplot(conf_plot, aes(term, y=exp(estimate), ymin=exp(conf.low), ymax=exp(conf.high))) +
+  geom_point() +
+  geom_errorbar(width=0.25) +
+  geom_hline(yintercept=1, color='black') +
+  scale_y_log10() +
+  labs(y='Odds Ratio', y='Term') +
+  coord_flip() +
+  theme_minimal()
+```
+
+
+```{r}
+conf_ints <- confint(best_model, oldNames=F, method='profile')
+# conf_ints <- confint(sample_model, oldNames=F)
+conf_ints
+```
+
+## Model Performance
 ```{r}
 # calculate a psuedo R^2 for the glmer model
 r.squaredGLMM(model)
 ```
 
-
 ```{r}
-model_pred <- augment(model) %>% 
+# Type response doesn't seem to return probabilities
+model_pred <- augment(best_model, type='response') %>% 
   mutate(
-    pred_prob = exp(.fitted) / (1 + exp(.fitted)),
-    pred_correct = pred_prob > 0.5
+    pred_odds = exp(.fitted),
+    pred_prob = pred_odds / (1 + pred_odds),
+    pred_class = ifelse(pred_prob > 0.5, 1, 0),
+    pred_correct = pred_class == correct
   )
-head(model_pred)
+
+# Calculate the proportion correct (accuracy)
+mean(model_pred$pred_correct)
 ```
 
 ```{r}
-model_pred %>% 
-  mutate(
-    model_correct = correct == pred_correct
-  ) %>% 
-  summarize(
-    prop_correct = mean(model_correct)
-  )
+# Calculate the proportion correct for the full dataset
+full_df %>% 
+  summarise(n=n(), frac_correct=mean(correct))
 ```
+
+
+
+The model doesn't have particularly high values of R^2. The accuracy isn't particularly high, but is better than random chance since ~53% of the observations were correct.
+
 
