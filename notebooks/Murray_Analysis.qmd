@@ -257,9 +257,10 @@ ggplot(conf_plot, aes(term, y=exp(estimate), ymin=exp(conf.low), ymax=exp(conf.h
 
 
 ```{r}
-conf_ints <- confint(best_model, oldNames=F, method='profile')
+# This takes forevvvverrrrrr to run
+# conf_ints <- confint(best_model, oldNames=F, method='profile')
 # conf_ints <- confint(sample_model, oldNames=F)
-conf_ints
+# conf_ints
 ```
 
 ## Model Performance
@@ -292,4 +293,97 @@ full_df %>%
 
 The model doesn't have particularly high values of R^2. The accuracy isn't particularly high, but is better than random chance since ~53% of the observations were correct.
 
+
+# Image Analysis
+
+## Proportions
+
+Start with just the proportion correct for each image, plot the top and bottom 8 images
+```{r}
+img_df <- full_df %>% 
+  group_by(currImg) %>% 
+  summarise(
+    n=n(),
+    frac_correct=mean(correct)
+  ) %>% 
+  arrange(frac_correct)
+
+ggplot(img_df, aes(frac_correct)) +
+  geom_histogram(fill='dodgerblue', color='white') +
+  theme_minimal()
+
+exceptional_images <- bind_rows(
+  head(img_df, 8),
+  tail(img_df, 8)
+)
+exceptional_images
+length(unique(exceptional_images$currImg))
+
+exceptional_dots <- inner_join(full_dots, exceptional_images, by='currImg') %>% 
+  arrange(frac_correct) %>% 
+  mutate(
+    size = ifelse(cond=='size', 3, 1)
+  )
+exceptional_dots
+
+ggplot(exceptional_dots, aes(x, y, color=cond, size=size)) +
+  facet_wrap(~currImg, ncol=4, nrow=4) +
+  geom_point() +
+  scale_size(range=c(1,2)) + 
+  theme_minimal()
+```
+
+## Model Analysis
+
+
+```{r}
+# Get prediction data from full_df where we only have one intery per currImg
+pred_df <- full_df %>% 
+  group_by(currImg) %>% 
+  summarise(
+    distToMiddleREV = mean(distToMiddleREV),
+    distToNearest = mean(distToNearest),
+    n_in_quadrant = mean(n_in_quadrant),
+    isColSame = mean(isColSame),
+    isSizeSame = mean(isSizeSame),
+    isPulseSame = mean(isPulseSame)
+  ) %>% 
+  left_join(img_df, by='currImg')
+
+# Get the coefficients and the average values for the inputs to calculate odds ratios
+coefs <- coef(best_model)$subj %>% colMeans()
+base_vals <- pred_df %>% 
+  colMeans()
+
+# Calculate the predicted probability as well as the odds ratios for each of the factors
+pred_df <- pred_df %>%
+  mutate(
+    pred_prob = predict(best_model, newdata=pred_df, type='response', re.form=NA),
+    pred_log_odds = predict(best_model, newdata=pred_df, type='link', re.form=NA),
+    distToMiddleREVOdds = exp((distToMiddleREV - base_vals[['distToMiddleREV']]) * coefs['distToMiddleREV']),
+    distToNearestOdds = exp((distToNearest - base_vals[['distToNearest']]) * coefs['distToNearest']),
+    n_in_quadrantOdds = exp((n_in_quadrant - base_vals[['n_in_quadrant']]) * coefs['n_in_quadrant']),
+  ) %>% 
+  arrange(frac_correct)
+
+
+# Take a look at the data for the top and bottom few images
+pred_df %>% head() %>% select(frac_correct, distToMiddleREVOdds, distToNearestOdds, n_in_quadrantOdds)
+pred_df %>% tail() %>% select(frac_correct, distToMiddleREVOdds, distToNearestOdds, n_in_quadrantOdds)
+```
+
+```{r}
+ggplot(pred_df, aes(frac_correct, pred_prob)) +
+  geom_point() +
+  theme_minimal()
+```
+
+
+$$
+\log(\frac {p} {1 - p}) = \beta_0 + \beta_1 x_1 + \beta_2 x_2 + \beta_3 x_3 \\
+
+\frac {p} {1 - p} = e^{\beta_0 + \beta_1 x_1 + \beta_2 x_2 + \beta_3 x_3} \\
+
+\frac {p} {1 - p} = e^{\beta_0} \times e^{\beta_1 x_1} \times e^{\beta_2 x_2} \times e^{\beta_3 x_3}
+$$
 
