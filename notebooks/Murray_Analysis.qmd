@@ -82,7 +82,7 @@ group_dots <- dots %>%
     names_from=cond,
     values_from=group_quadrant
   )
-group_dots
+group_dots %>% head()
 ```
 
 
@@ -92,13 +92,13 @@ Join the dot data back with the response data
 full_df <- left_join(df, mean_full_dots, by = 'currImg') %>% 
   left_join(group_dots, by='currImg') %>%
   mutate(
-    correct = resp == corrQuadREV,
+    correct = as.numeric(resp == corrQuadREV),
     distToNearest = pmin(abs(meanx -50), abs(meany - 50)),
     isColSameREV = as.numeric(color == corrQuadREV),
     isSizeSameREV = as.numeric(size == corrQuadREV),
     isPulseSameREV = as.numeric(pulse == corrQuadREV)
     )
-full_df %>% head() %>% select(isColSame, isColSameREV)
+full_df %>% head() %>% select(isColSame, isColSameREV, correct)
 ```
 
 
@@ -149,7 +149,6 @@ for (i in 1:length(cols)) {
     )
   summaries <- bind_rows(summaries, df_summary)
 }
-head(summaries)
 ```
 
 
@@ -171,7 +170,7 @@ formula <- correct ~
   distToMiddleREV + 
   n_in_quadrant +
   meanSD +
-  distToNearest + 
+  distToNearest +
   isColSame +
   isSizeSame +
   isPulseSame +
@@ -238,13 +237,8 @@ summary(sample_model)
 
 ```{r}
 wald_confints <- tidy(best_model, conf.int=T, conf.method='Wald')
-wald_confints
-
-```
-
-
-```{r}
 conf_plot <- wald_confints %>% filter(!(term %in% c('(Intercept)', 'sd__(Intercept)')))
+
 ggplot(conf_plot, aes(term, y=exp(estimate), ymin=exp(conf.low), ymax=exp(conf.high))) +
   geom_point() +
   geom_errorbar(width=0.25) +
@@ -255,12 +249,49 @@ ggplot(conf_plot, aes(term, y=exp(estimate), ymin=exp(conf.low), ymax=exp(conf.h
   theme_minimal()
 ```
 
+```{r}
+full_df %>% select(distToNearest, distToMiddleREV, n_in_quadrant) %>% colMeans()
+
+full_df %>% select(distToNearest, distToMiddleREV, n_in_quadrant) %>% summary()
+```
+
 
 ```{r}
-# This takes forevvvverrrrrr to run
-# conf_ints <- confint(best_model, oldNames=F, method='profile')
-# conf_ints <- confint(sample_model, oldNames=F)
-# conf_ints
+# This takes a while to run
+conf_ints <- confint(
+  best_model, 
+  oldNames=F, 
+  method='boot', 
+  parallel='multicore',
+  ncpus=8,
+  .progress='txt'
+  )
+conf_ints
+```
+
+```{r}
+conf_ints
+# save(conf_ints, file='conf_ints.RData')
+```
+
+```{r}
+conf_df <- as.data.frame(conf_ints)
+colnames(conf_df) <- c('conf.low', 'conf.high')
+conf_df <- conf_df %>% rownames_to_column('term')
+boot_confint <- tidy(best_model) %>% left_join(conf_df, by='term')
+```
+
+```{r}
+boot_conf_plot <- boot_confint %>% filter(!(term %in% c('(Intercept)', 'sd__(Intercept)')))
+ggplot(boot_conf_plot, aes(term, y=exp(estimate), ymin=exp(conf.low), ymax=exp(conf.high))) +
+  geom_point() +
+  geom_errorbar(width=0.25) +
+  geom_hline(yintercept=1, color='black') +
+  scale_y_log10() +
+  labs(y='Odds Ratio', x='Term') +
+  coord_flip() +
+  theme_minimal()
+ggsave('../presentation/figures/effect_conf_ints.png')
 ```
 
 ## Model Performance
@@ -290,9 +321,32 @@ full_df %>%
 ```
 
 
-
 The model doesn't have particularly high values of R^2. The accuracy isn't particularly high, but is better than random chance since ~53% of the observations were correct.
 
+## Model Checks
+
+```{r}
+preds <- data.frame()
+cols <- c('distToMiddleREV', 'distToNearest', 'n_in_quadrant')
+for (col in cols) {
+  df <- ggpredict(best_model, terms=c(paste(col, '[all]', sep=''))) %>% 
+    as.data.frame() %>% 
+    mutate(col_name=col)
+  preds <- bind_rows(preds, df)
+}
+preds %>% head()
+```
+
+
+
+
+```{r}
+ggplot(summaries, aes(mean_value, prop_correct)) +
+  facet_wrap(~col_name, scales='free_x', ncol=2) +
+  geom_point() +
+  geom_line(data=preds, aes(x=x, y=predicted), color='firebrick') +
+  theme_minimal()
+```
 
 # Image Analysis
 
@@ -313,8 +367,8 @@ ggplot(img_df, aes(frac_correct)) +
   theme_minimal()
 
 exceptional_images <- bind_rows(
-  head(img_df, 8),
-  tail(img_df, 8)
+  head(img_df, 9),
+  tail(img_df, 9)
 )
 exceptional_images
 length(unique(exceptional_images$currImg))
@@ -324,13 +378,32 @@ exceptional_dots <- inner_join(full_dots, exceptional_images, by='currImg') %>%
   mutate(
     size = ifelse(cond=='size', 3, 1)
   )
-exceptional_dots
 
-ggplot(exceptional_dots, aes(x, y, color=cond, size=size)) +
-  facet_wrap(~currImg, ncol=4, nrow=4) +
+hard_dots <- exceptional_dots %>% filter(frac_correct < 0.5)
+ggplot(hard_dots, aes(x, y, color=cond, size=size)) +
+  facet_wrap(~currImg, ncol=3) +
   geom_point() +
-  scale_size(range=c(1,2)) + 
-  theme_minimal()
+  scale_size(range=c(1,2)) +
+  labs(title='Hardest Images', color='Group', x='', y='') +
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  guides(size='none')
+  # theme(legend.position='none')
+    
+ggsave('../presentation/figures/hard_images.png')
+
+hard_dots <- exceptional_dots %>% filter(frac_correct > 0.5)
+ggplot(hard_dots, aes(x, y, color=cond, size=size)) +
+  facet_wrap(~currImg, ncol=3) +
+  geom_point() +
+  scale_size(range=c(1,2)) +
+  labs(title='Easiest Images', color='Group', x='', y='') +
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  guides(size='none')
+  # theme(legend.position='none')
+    
+ggsave('../presentation/figures/easy_images.png')
 ```
 
 ## Model Analysis
@@ -352,8 +425,7 @@ pred_df <- full_df %>%
 
 # Get the coefficients and the average values for the inputs to calculate odds ratios
 coefs <- coef(best_model)$subj %>% colMeans()
-base_vals <- pred_df %>% 
-  colMeans()
+
 
 # Calculate the predicted probability as well as the odds ratios for each of the factors
 pred_df <- pred_df %>%
