@@ -10,6 +10,7 @@ library(lme4)
 library(broom)
 library(MuMIn)
 library(broom.mixed)
+library(GGally)
 ```
 
 # Data Loading and Processing
@@ -60,9 +61,10 @@ head(full_dots)
 # Calculate the number of dots in the same quadrant as the centroid
 mean_full_dots <- full_dots %>% 
   group_by(currImg) %>% 
-  summarise(n_in_quadrant = sum(in_mean_quadrant))
+  summarise(n_in_quadrant = sum(in_mean_quadrant), n=n())
 head(mean_full_dots)
 ```
+
 
 Calculate if the special groups are in the same quadrant as the mean of all
 ```{r}
@@ -115,11 +117,36 @@ full_df %>%
 ```
 
 
+
+
 Plot our data to check that we correctly identified the quadrants for the centroids
 ```{r}
 ggplot(df, aes(meanx, meany, color=corrQuadREV)) +
   geom_point()
 ```
+
+## New Variable Explanation
+
+```{r}
+single_img <- full_dots %>% filter(currImg == 4)
+
+ggplot(single_img, aes(x, y, color=in_mean_quadrant)) +
+  geom_point() +
+  labs(title='Example of N-in-quadrant', color='') +
+  geom_point(aes(x=meanx, y=meany, color='Centroid'), size=3) +
+  scale_color_manual(values=c('dodgerblue', 'grey', 'red')) +
+  geom_vline(xintercept=50, color='black') +
+  geom_hline(yintercept=50, color='black') +
+  lims(x=c(0, 100), y=c(0, 100)) +
+  theme_minimal(base_size=18)
+ggsave('../presentation/figures/n_in_quadrant.png')
+```
+
+```{r}
+full_df %>% filter(currImg == 4) %>% select(n_in_quadrant, correct) %>% head()
+```
+
+
 
 # EDA
 
@@ -159,6 +186,13 @@ ggplot(summaries, aes(mean_value, prop_correct)) +
   theme_minimal()
 ```
 
+Take a look at correlation between fixed effects
+```{r}
+ggcorr(full_df %>% select(distToMiddleREV, distToNearest, n_in_quadrant, isColSame, isSizeSame, isPulseSame))
+ggsave('../presentation/figures/fixed_effects_correlation.png')
+```
+
+
 # Modeling
 
 I left out `howManyCorr` becuase of collinearity, and the currImg due to convergence issues.
@@ -182,33 +216,20 @@ model <- glmer(
   formula=formula,
   data = full_df,
   family = binomial,
+  # control=glmerControl(optimizer='bobyqa')
   )
 summary(model)
 ```
 
+```{r}
+# calculate a psuedo R^2 for the glmer model
+r.squaredGLMM(model)
+```
 
 ## Model Selection
 
-### Stepwise - Forward
-
-```{r}
-base_model <- glmer(
-  correct ~ isColSame + isSizeSame + isPulseSame + (1|subj),
-  data = full_df,
-  family = binomial
-  )
-base_model
-```
-
-
-```{r}
-# Apparently this doesn't work but "dredge" does? 
-# scope = list(lower=base_model)
-# forward_model <- step(model, scope=scope, direction='forward')
-```
-
-
 ### Dredge
+
 
 ```{r}
 options(na.action='na.fail')
@@ -222,37 +243,18 @@ best_model <- get.models(dredge_res, 1)[[1]]
 summary(best_model)
 ```
 
-```{r}
-# Get a sample of the full dataset full_df and fit a model, use this to test out the confidence interval algorithms.
-sample_index <- sample(1:nrow(full_df), 1000, replace=F)
-sample_df <- full_df[sample_index,]
-
-sample_model <- glmer(
-  correct ~ distToMiddleREV + distToNearest + n_in_quadrant + isColSame + isSizeSame + isPulseSame + (1|subj), 
-  data = sample_df, 
-  family = binomial
-  )
-summary(sample_model)
-```
 
 ```{r}
-wald_confints <- tidy(best_model, conf.int=T, conf.method='Wald')
-conf_plot <- wald_confints %>% filter(!(term %in% c('(Intercept)', 'sd__(Intercept)')))
-
-ggplot(conf_plot, aes(term, y=exp(estimate), ymin=exp(conf.low), ymax=exp(conf.high))) +
-  geom_point() +
-  geom_errorbar(width=0.25) +
-  geom_hline(yintercept=1, color='black') +
-  scale_y_log10() +
-  labs(y='Odds Ratio', y='Term') +
-  coord_flip() +
-  theme_minimal()
-```
-
-```{r}
-full_df %>% select(distToNearest, distToMiddleREV, n_in_quadrant) %>% colMeans()
-
 full_df %>% select(distToNearest, distToMiddleREV, n_in_quadrant) %>% summary()
+
+full_df %>% summarize(
+  distToNearestMean = mean(distToNearest), 
+  distToNearestSD = sd(distToNearest),
+  distToMiddleREVMean = mean(distToMiddleREV),
+  distToMiddleREVSD = sd(distToMiddleREV),
+  n_in_quadrantMean = mean(n_in_quadrant),
+  n_in_quadrantSD = sd(n_in_quadrant)
+  )
 ```
 
 
@@ -282,22 +284,60 @@ boot_confint <- tidy(best_model) %>% left_join(conf_df, by='term')
 ```
 
 ```{r}
-boot_conf_plot <- boot_confint %>% filter(!(term %in% c('(Intercept)', 'sd__(Intercept)')))
-ggplot(boot_conf_plot, aes(term, y=exp(estimate), ymin=exp(conf.low), ymax=exp(conf.high))) +
+boot_conf_plot <- boot_confint %>% 
+  filter(!(term %in% c('(Intercept)', 'sd__(Intercept)'))) %>% 
+  mutate(
+    term_class = case_when(
+      term == 'isColSame' ~ 'constant',
+      term == 'isSizeSame' ~ 'constant',
+      term == 'isPulseSame' ~ 'constant',
+      term == 'distToMiddleREV' ~ 'continuous',
+      term == 'distToNearest' ~ 'continuous',
+      term == 'n_in_quadrant' ~ 'continuous'
+    ),
+    term_label = case_when(
+      term == 'isColSame' ~ 'Is Color the Same',
+      term == 'isSizeSame' ~ 'Is Size the Same',
+      term == 'isPulseSame' ~ 'Is Pulse the Same',
+      term == 'distToMiddleREV' ~ 'Distance to Middle',
+      term == 'distToNearest' ~ 'Distance to Nearest',
+      term == 'n_in_quadrant' ~ 'N in Quadrant'
+    ),
+    term_label = factor(term_label, ordered=T, levels=c('Is Color the Same', 'Is Size the Same', 'Is Pulse the Same', 'Distance to Middle', 'Distance to Nearest', 'N in Quadrant')),
+  ) %>% 
+  arrange(term_class, term_label)
+
+ggplot(boot_conf_plot, aes(term_label, y=exp(estimate), ymin=exp(conf.low), ymax=exp(conf.high))) +
   geom_point() +
   geom_errorbar(width=0.25) +
   geom_hline(yintercept=1, color='black') +
-  scale_y_log10() +
+  scale_y_log10(breaks=c(0.5, 1, 4), limits=c(0.5, 4)) +
+  scale_x_discrete(limits=c('Is Size the Same', 'Is Color the Same', 'Is Pulse the Same', 'Distance to Middle', 'Distance to Nearest', 'N in Quadrant')) +
   labs(y='Odds Ratio', x='Term') +
   coord_flip() +
-  theme_minimal()
+  theme_minimal(base_size=18)
 ggsave('../presentation/figures/effect_conf_ints.png')
 ```
+
+
+
+```{r}
+blups <- ranef(best_model)$subj
+colnames(blups) <- c('subj')
+
+ggplot(blups, aes(sample=subj)) +
+  geom_qq() +
+  geom_qq_line() +
+  theme_minimal() +
+  labs(title='Subject Random Effects QQ Plot')
+```
+
+
 
 ## Model Performance
 ```{r}
 # calculate a psuedo R^2 for the glmer model
-r.squaredGLMM(model)
+r.squaredGLMM(best_model)
 ```
 
 ```{r}
@@ -315,9 +355,7 @@ mean(model_pred$pred_correct)
 ```
 
 ```{r}
-# Calculate the proportion correct for the full dataset
-full_df %>% 
-  summarise(n=n(), frac_correct=mean(correct))
+mean(full_df$correct)
 ```
 
 
@@ -326,26 +364,26 @@ The model doesn't have particularly high values of R^2. The accuracy isn't parti
 ## Model Checks
 
 ```{r}
-preds <- data.frame()
-cols <- c('distToMiddleREV', 'distToNearest', 'n_in_quadrant')
-for (col in cols) {
-  df <- ggpredict(best_model, terms=c(paste(col, '[all]', sep=''))) %>% 
-    as.data.frame() %>% 
-    mutate(col_name=col)
-  preds <- bind_rows(preds, df)
-}
-preds %>% head()
+# preds <- data.frame()
+# cols <- c('distToMiddleREV', 'distToNearest', 'n_in_quadrant')
+# for (col in cols) {
+#   df <- ggpredict(best_model, terms=c(paste(col, '[all]', sep=''))) %>% 
+#     as.data.frame() %>% 
+#     mutate(col_name=col)
+#   preds <- bind_rows(preds, df)
+# }
+# preds %>% head()
 ```
 
 
 
 
 ```{r}
-ggplot(summaries, aes(mean_value, prop_correct)) +
-  facet_wrap(~col_name, scales='free_x', ncol=2) +
-  geom_point() +
-  geom_line(data=preds, aes(x=x, y=predicted), color='firebrick') +
-  theme_minimal()
+# ggplot(summaries, aes(mean_value, prop_correct)) +
+#   facet_wrap(~col_name, scales='free_x', ncol=2) +
+#   geom_point() +
+#   geom_line(data=preds, aes(x=x, y=predicted), color='firebrick') +
+#   theme_minimal()
 ```
 
 # Image Analysis
@@ -369,7 +407,8 @@ ggplot(img_df, aes(frac_correct)) +
 exceptional_images <- bind_rows(
   head(img_df, 9),
   tail(img_df, 9)
-)
+) %>% 
+  mutate(type=ifelse(frac_correct < 0.5, 'hard', 'easy'))
 exceptional_images
 length(unique(exceptional_images$currImg))
 
@@ -384,22 +423,28 @@ ggplot(hard_dots, aes(x, y, color=cond, size=size)) +
   facet_wrap(~currImg, ncol=3) +
   geom_point() +
   scale_size(range=c(1,2)) +
+  scale_color_manual(values=c('red', 'navy', 'orange')) +
   labs(title='Hardest Images', color='Group', x='', y='') +
   theme_minimal() +
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  scale_x_continuous(breaks=c(0, 100)) +
+  scale_y_continuous(breaks=c(0, 100)) +
+  theme(panel.grid.minor = element_blank()) +
   guides(size='none')
   # theme(legend.position='none')
     
 ggsave('../presentation/figures/hard_images.png')
 
-hard_dots <- exceptional_dots %>% filter(frac_correct > 0.5)
+hard_dots <- exceptional_dots %>% filter(frac_correct > 0.5) %>% arrange(cond)
 ggplot(hard_dots, aes(x, y, color=cond, size=size)) +
   facet_wrap(~currImg, ncol=3) +
   geom_point() +
   scale_size(range=c(1,2)) +
+  scale_color_manual(values=c('red', 'navy', 'orange')) +
   labs(title='Easiest Images', color='Group', x='', y='') +
   theme_minimal() +
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  scale_x_continuous(breaks=c(0, 100)) +
+  scale_y_continuous(breaks=c(0, 100)) +
+  theme(panel.grid.minor = element_blank()) +
   guides(size='none')
   # theme(legend.position='none')
     
@@ -425,7 +470,7 @@ pred_df <- full_df %>%
 
 # Get the coefficients and the average values for the inputs to calculate odds ratios
 coefs <- coef(best_model)$subj %>% colMeans()
-
+base_vals <- pred_df %>% select(distToMiddleREV, distToNearest, n_in_quadrant) %>% colMeans()
 
 # Calculate the predicted probability as well as the odds ratios for each of the factors
 pred_df <- pred_df %>%
@@ -440,22 +485,65 @@ pred_df <- pred_df %>%
 
 
 # Take a look at the data for the top and bottom few images
-pred_df %>% head() %>% select(frac_correct, distToMiddleREVOdds, distToNearestOdds, n_in_quadrantOdds)
-pred_df %>% tail() %>% select(frac_correct, distToMiddleREVOdds, distToNearestOdds, n_in_quadrantOdds)
+pred_df %>% head(9) %>% select(frac_correct, pred_prob, pred_log_odds, distToMiddleREVOdds, distToNearestOdds, n_in_quadrantOdds)
+pred_df %>% tail(9) %>% select(frac_correct, pred_prob, pred_log_odds, distToMiddleREVOdds, distToNearestOdds, n_in_quadrantOdds)
 ```
 
+
+## Take a look at fitting a model where the extereme performers are no longer included
 ```{r}
-ggplot(pred_df, aes(frac_correct, pred_prob)) +
-  geom_point() +
+# Calculate subject accuracy
+subj_acc <- full_df %>% 
+  group_by(subj) %>% 
+  summarise(
+    accuracy = mean(correct)
+  )
+ggplot(subj_acc, aes(accuracy)) +
+  geom_histogram(fill='dodgerblue', color='white') +
   theme_minimal()
 ```
 
 
-$$
-\log(\frac {p} {1 - p}) = \beta_0 + \beta_1 x_1 + \beta_2 x_2 + \beta_3 x_3 \\
+```{r}
+thresh = 0.3
+subj_keep <- subj_acc %>% 
+  filter(
+    accuracy > thresh 
+    & accuracy < 1 - thresh
+    )
+keep_df <- full_df %>% 
+  inner_join(subj_keep, by='subj')
 
-\frac {p} {1 - p} = e^{\beta_0 + \beta_1 x_1 + \beta_2 x_2 + \beta_3 x_3} \\
+# keep_df %>% head()
 
-\frac {p} {1 - p} = e^{\beta_0} \times e^{\beta_1 x_1} \times e^{\beta_2 x_2} \times e^{\beta_3 x_3}
-$$
+no_outlier_model <- glmer(
+  correct~distToMiddleREV + distToNearest + n_in_quadrant + isColSame + isSizeSame + isPulseSame + (1|subj), 
+  data = keep_df, 
+  family = binomial,
+  nAGQ=1,
+  control=glmerControl(optimizer='bobyqa')
+  )
+summary(no_outlier_model)
+```
+
+
+## Subject Performance Bias
+
+Take a look to see if we had more bad or really good subjects working on some images which might lead us to believing that an image was easuer or harder than it actually was
+
+```{r}
+subj_img_df <- inner_join(
+  full_df,
+  exceptional_images %>% select(currImg, frac_correct, type),
+  by='currImg'
+) %>% 
+  left_join(subj_acc, by='subj')
+
+ggplot(subj_img_df, aes(factor(currImg), accuracy, fill=type)) +
+  facet_grid(rows=vars(type), scales='free') + 
+  geom_boxplot() +
+  theme_minimal()
+```
+
+
 
