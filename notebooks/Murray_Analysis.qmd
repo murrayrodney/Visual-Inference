@@ -253,6 +253,28 @@ r.squaredGLMM(model)
 
 ```
 
+## Checkout a transformation
+
+Try sqrt or log transformation of the n_in_quadrant to see if it makes a difference
+```{r}
+trans_formula <- correct ~ 
+  distToMiddleREV + 
+  log(n_in_quadrant) +
+  log(distToNearest) +
+  isColSame +
+  isSizeSame +
+  isPulseSame +
+  (1|subj)
+
+trans_model <- glmer(
+  formula=trans_formula,
+  data = full_df,
+  family = binomial,
+  )
+summary(trans_model)
+```
+
+
 ## Model Selection
 
 ### Dredge
@@ -264,6 +286,44 @@ options(na.action='na.fail')
 dredge_res <- dredge(model, fixed=c('isColSame', 'isPulseSame', 'isSizeSame'))
 dredge_res
 
+```
+
+Plot a heat map of the coefficients for each model
+```{r}
+# plot a heatmap of the coefficients for each model in the dredge results
+dredge_df <- as.data.frame(dredge_res) %>% 
+  select(-df, -logLik, -delta, -weight) %>% 
+  mutate(
+    model_id=row_number(),
+    has_n_in_quadrant = !is.na(n_in_quadrant)
+    ) %>% 
+  pivot_longer(cols=c('(Intercept)', 'distToMiddleREV', 'distToNearest', 'isColSame', 'isPulseSame', 'isSizeSame', 'meanSD', 'n_in_quadrant'), names_to='term', values_to='estimate') %>% 
+  filter(term != '(Intercept)') %>% 
+  mutate(
+    odds_ratio = exp(estimate),
+  ) %>% 
+  arrange(AICc)
+dredge_df %>% head()
+```
+
+```{r}
+ggplot(dredge_df, aes(x=term, y=model_id, fill=estimate)) +
+  geom_tile() +
+  scale_fill_gradient2(low='red', mid='white', high='dodgerblue', midpoint=0) +
+  theme_minimal() +
+  labs(title='Dredge Results', x='Rank', y='Term')
+```
+
+```{r}
+ggplot(dredge_df, aes(x=odds_ratio, y=term, color=has_n_in_quadrant)) +
+  # geom_point() +
+  geom_jitter(
+    width=0, height=0.25
+  ) +
+  scale_x_log10() +
+  geom_vline(xintercept=1, color='black') + 
+  labs(x='Odds Ratio', y='Term', title='Illustration of Effect of N in Quadrant on other variables')
+ggsave('../presentation/figures/dredge_estimates.png')
 ```
 
 
@@ -408,6 +468,10 @@ img_df <- full_df %>%
   ) %>% 
   arrange(frac_correct)
 
+```
+
+
+```{r}
 # Look at the distribution of the proportion correct by image
 ggplot(img_df, aes(frac_correct)) +
   geom_histogram(fill='dodgerblue', color='white') +
@@ -504,7 +568,8 @@ pred_df %>% tail(9) %>% select(frac_correct, pred_prob, pred_log_odds, distToMid
 ```
 
 
-## Take a look at fitting a model where the extereme performers are no longer included
+
+# Subject Analysis
 ```{r}
 # ------------------------------
 # Subject Analysis
@@ -566,6 +631,15 @@ ggplot(subj_img_df, aes(factor(currImg), accuracy, fill=type)) +
   theme_minimal()
 
 ```
+
+# Appendix B - Table of Image Proportions
+```{r}
+# Provide a table showing how many subjects saw each image and the proportion that correctly identified the quadrant
+img_df %>% 
+  kable(col.names=c('Image ID', 'N Subjects', 'Proportion Correct'))
+
+```
+
 
 # Appendix
 
