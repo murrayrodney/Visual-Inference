@@ -1,8 +1,15 @@
 ---
 title: "Visual Analysis"
 author: "Rodney Murray"
-format: html
+format: docx
 ---
+
+```{r setup, include=FALSE}
+#Retain this code chunk!!!
+library(knitr)
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+```
 
 ```{r}
 library(tidyverse)
@@ -11,6 +18,8 @@ library(broom)
 library(MuMIn)
 library(broom.mixed)
 library(GGally)
+library(corrplot)
+
 ```
 
 # Data Loading and Processing
@@ -18,13 +27,20 @@ library(GGally)
 
 ## Load Data
 ```{r}
+# ------------------------------
+# Data Loading and Preprocessing
+# ------------------------------
+
+# Load data
 df <- read.csv('../src/data/WittData_AHRev052324.csv')
 dots <- read.csv('../src/data/Witt_Dots.csv')
+
 ```
 
 ## Processing
 Calculate which quadrant each dot is in
 ```{r}
+# Calculate the quadrant that each dot is in
 dots <- dots %>% mutate(
   quadrant = case_when(
   x < 50 & y >= 50 ~ 'A',
@@ -33,10 +49,12 @@ dots <- dots %>% mutate(
   x >= 50 & y < 50 ~ 'D',
   )
 )
+
 ```
 
 Calculate the mean values for x and y and which quadrant the centroid is in
 ```{r}
+# Calculate the centroid for each image and the corresponding quadrant
 mean_dots <- dots %>% 
   group_by(currImg) %>% 
   summarise(meanx = mean(x), meany = mean(y)) %>% 
@@ -48,10 +66,12 @@ mean_dots <- dots %>%
         meanx >= 50 & meany < 50 ~ 'D',
     )
   )
+
 ```
 
 Join the centroid and associated quadrant back to the dots
 ```{r}
+# Jone the centroid and quadrant back to the dots
 full_dots <- left_join(dots, mean_dots, by = 'currImg') %>% 
   mutate(
     in_mean_quadrant = quadrant == mean_quadrant
@@ -63,11 +83,13 @@ mean_full_dots <- full_dots %>%
   group_by(currImg) %>% 
   summarise(n_in_quadrant = sum(in_mean_quadrant), n=n())
 head(mean_full_dots)
+
 ```
 
 
 Calculate if the special groups are in the same quadrant as the mean of all
 ```{r}
+# Calculate if the special groups are in the same quadrant as the mean of all to double check the input data
 group_dots <- dots %>% 
   group_by(currImg, cond) %>% 
   summarize(meanx=mean(x), meany=mean(y)) %>% 
@@ -85,12 +107,14 @@ group_dots <- dots %>%
     values_from=group_quadrant
   )
 group_dots %>% head()
+
 ```
 
 
 
 Join the dot data back with the response data
 ```{r}
+# Join the dot data back with the response data
 full_df <- left_join(df, mean_full_dots, by = 'currImg') %>% 
   left_join(group_dots, by='currImg') %>%
   mutate(
@@ -101,11 +125,13 @@ full_df <- left_join(df, mean_full_dots, by = 'currImg') %>%
     isPulseSameREV = as.numeric(pulse == corrQuadREV)
     )
 full_df %>% head() %>% select(isColSame, isColSameREV, correct)
+
 ```
 
 
 Interestingly enough it seems that the special groups were correctly calculated
 ```{r}
+# Doulbe check that the special groups were correctly calculated
 full_df %>% 
   mutate(
     color = isColSame == isColSameREV,
@@ -114,6 +140,7 @@ full_df %>%
     ) %>% 
   select(color, size, pulse, isColSameREV, isSizeSameREV, isPulseSameREV) %>% 
   summary()
+
 ```
 
 
@@ -121,13 +148,16 @@ full_df %>%
 
 Plot our data to check that we correctly identified the quadrants for the centroids
 ```{r}
+# Plot the centroids for all images and color by the quadrant for QC
 ggplot(df, aes(meanx, meany, color=corrQuadREV)) +
   geom_point()
+
 ```
 
 ## New Variable Explanation
 
 ```{r}
+# Take a look at the new variables for a single image
 single_img <- full_dots %>% filter(currImg == 4)
 
 ggplot(single_img, aes(x, y, color=in_mean_quadrant)) +
@@ -140,10 +170,7 @@ ggplot(single_img, aes(x, y, color=in_mean_quadrant)) +
   lims(x=c(0, 100), y=c(0, 100)) +
   theme_minimal(base_size=18)
 ggsave('../presentation/figures/n_in_quadrant.png')
-```
 
-```{r}
-full_df %>% filter(currImg == 4) %>% select(n_in_quadrant, correct) %>% head()
 ```
 
 
@@ -151,18 +178,13 @@ full_df %>% filter(currImg == 4) %>% select(n_in_quadrant, correct) %>% head()
 # EDA
 
 ```{r}
-cols <- c('distToNearest', 'distToMiddleREV', 'n_in_quadrant')
-
-
-df_summary <- full_df %>% 
-  mutate(dist_bin = cut(distToMiddleREV, breaks = 20)) %>% 
-  group_by(dist_bin) %>%
-  summarise(
-    prop_correct = mean(correct),
-    mea_dist = mean(distToMiddleREV)
-    )
+# ------------------------------
+# EDA
+# ------------------------------
 
 # Iterate over each column in cols and calculate the proportion correct for binned values of each column
+# This will help us identify potential relationships between the continuous variables and the probability the subject correctly identified the quadrant
+cols <- c('distToNearest', 'distToMiddleREV', 'n_in_quadrant')
 summaries <- data.frame()
 for (i in 1:length(cols)) {
   col <- cols[i]
@@ -176,20 +198,21 @@ for (i in 1:length(cols)) {
     )
   summaries <- bind_rows(summaries, df_summary)
 }
-```
 
-
-```{r}
 ggplot(summaries, aes(mean_value, prop_correct)) +
   facet_wrap(~col_name, scales='free_x', ncol=2) +
   geom_point() +
   theme_minimal()
+
 ```
 
-Take a look at correlation between fixed effects
 ```{r}
-ggcorr(full_df %>% select(distToMiddleREV, distToNearest, n_in_quadrant, isColSame, isSizeSame, isPulseSame))
-ggsave('../presentation/figures/fixed_effects_correlation.png')
+# Take a look at the correlation between the fixed effects
+corrs <- full_df %>% 
+  select(isPulseSame, isColSame, howManyCorr, isSizeSame, distToNearest, n_in_quadrant, distToMiddleREV) %>% 
+  cor()
+corrplot(corrs, type='upper')
+
 ```
 
 
@@ -200,6 +223,11 @@ I left out `howManyCorr` becuase of collinearity, and the currImg due to converg
 Not too worried about currImg being out since we have other variables which should help describe the data reasonbly well.
 
 ```{r}
+# ------------------------------
+# Modeling
+# ------------------------------
+
+# Fit a full model with all potential fixed effects that we want to consider
 formula <- correct ~ 
   distToMiddleREV + 
   n_in_quadrant +
@@ -208,22 +236,21 @@ formula <- correct ~
   isColSame +
   isSizeSame +
   isPulseSame +
-  # howManyCorr +
-  # (1|currImg) +
   (1|subj)
 
 model <- glmer(
   formula=formula,
   data = full_df,
   family = binomial,
-  # control=glmerControl(optimizer='bobyqa')
   )
 summary(model)
+
 ```
 
 ```{r}
 # calculate a psuedo R^2 for the glmer model
 r.squaredGLMM(model)
+
 ```
 
 ## Model Selection
@@ -232,65 +259,59 @@ r.squaredGLMM(model)
 
 
 ```{r}
+# Use Dredge to find the best model
 options(na.action='na.fail')
 dredge_res <- dredge(model, fixed=c('isColSame', 'isPulseSame', 'isSizeSame'))
 dredge_res
+
 ```
 
 
 ```{r}
 best_model <- get.models(dredge_res, 1)[[1]]
 summary(best_model)
+
 ```
 
 
 ```{r}
-full_df %>% select(distToNearest, distToMiddleREV, n_in_quadrant) %>% summary()
-
-full_df %>% summarize(
-  distToNearestMean = mean(distToNearest), 
-  distToNearestSD = sd(distToNearest),
-  distToMiddleREVMean = mean(distToMiddleREV),
-  distToMiddleREVSD = sd(distToMiddleREV),
-  n_in_quadrantMean = mean(n_in_quadrant),
-  n_in_quadrantSD = sd(n_in_quadrant)
-  )
-```
+# Calculate confidence intervals for the model using bootstrapping methods
 
 
-```{r}
-# This takes a while to run
-conf_ints <- confint(
-  best_model, 
-  oldNames=F, 
-  method='boot', 
-  parallel='multicore',
-  ncpus=8,
-  .progress='txt'
-  )
-conf_ints
-```
-
-```{r}
-conf_ints
+# This takes a while to run, only run once, then save results and load later when re-running
+# conf_ints <- confint(
+#   best_model, 
+#   oldNames=F, 
+#   method='boot', 
+#   parallel='multicore',
+#   ncpus=8,
+#   .progress='txt'
+#   )
 # save(conf_ints, file='conf_ints.RData')
+# conf_ints
+load('conf_ints.RData')
+
 ```
 
+
 ```{r}
+# Tidy up the confidence intervals and join with the coefficients for plots
 conf_df <- as.data.frame(conf_ints)
 colnames(conf_df) <- c('conf.low', 'conf.high')
 conf_df <- conf_df %>% rownames_to_column('term')
 boot_confint <- tidy(best_model) %>% left_join(conf_df, by='term')
+
 ```
 
 ```{r}
+# Classify the coeficients and provide more meaningful names for the plots
 boot_conf_plot <- boot_confint %>% 
   filter(!(term %in% c('(Intercept)', 'sd__(Intercept)'))) %>% 
   mutate(
     term_class = case_when(
-      term == 'isColSame' ~ 'constant',
-      term == 'isSizeSame' ~ 'constant',
-      term == 'isPulseSame' ~ 'constant',
+      term == 'isColSame' ~ 'categorical',
+      term == 'isSizeSame' ~ 'categorical',
+      term == 'isPulseSame' ~ 'categorical',
       term == 'distToMiddleREV' ~ 'continuous',
       term == 'distToNearest' ~ 'continuous',
       term == 'n_in_quadrant' ~ 'continuous'
@@ -307,6 +328,7 @@ boot_conf_plot <- boot_confint %>%
   ) %>% 
   arrange(term_class, term_label)
 
+# Plot the model estimate along with the confidence intervals
 ggplot(boot_conf_plot, aes(term_label, y=exp(estimate), ymin=exp(conf.low), ymax=exp(conf.high))) +
   geom_point() +
   geom_errorbar(width=0.25) +
@@ -317,11 +339,13 @@ ggplot(boot_conf_plot, aes(term_label, y=exp(estimate), ymin=exp(conf.low), ymax
   coord_flip() +
   theme_minimal(base_size=18)
 ggsave('../presentation/figures/effect_conf_ints.png')
+
 ```
 
 
 
 ```{r}
+# Make a QQ plot of the random effects to see if the normality assumption is reasonable
 blups <- ranef(best_model)$subj
 colnames(blups) <- c('subj')
 
@@ -330,18 +354,21 @@ ggplot(blups, aes(sample=subj)) +
   geom_qq_line() +
   theme_minimal() +
   labs(title='Subject Random Effects QQ Plot')
+ggsave('../presentation/figures/blup_qq_plot.png')
+
 ```
 
 
 
 ## Model Performance
 ```{r}
-# calculate a psuedo R^2 for the glmer model
+# calculate a psuedo R^2 for the selected glmer model
 r.squaredGLMM(best_model)
+
 ```
 
 ```{r}
-# Type response doesn't seem to return probabilities
+# Type response doesn't seem to return probabilities, so we need to calculate them manually
 model_pred <- augment(best_model, type='response') %>% 
   mutate(
     pred_odds = exp(.fitted),
@@ -352,39 +379,15 @@ model_pred <- augment(best_model, type='response') %>%
 
 # Calculate the proportion correct (accuracy)
 mean(model_pred$pred_correct)
-```
 
-```{r}
+# Calculate the proporion of observations where the subject correctly identified the quadrant
 mean(full_df$correct)
+
 ```
 
 
 The model doesn't have particularly high values of R^2. The accuracy isn't particularly high, but is better than random chance since ~53% of the observations were correct.
 
-## Model Checks
-
-```{r}
-# preds <- data.frame()
-# cols <- c('distToMiddleREV', 'distToNearest', 'n_in_quadrant')
-# for (col in cols) {
-#   df <- ggpredict(best_model, terms=c(paste(col, '[all]', sep=''))) %>% 
-#     as.data.frame() %>% 
-#     mutate(col_name=col)
-#   preds <- bind_rows(preds, df)
-# }
-# preds %>% head()
-```
-
-
-
-
-```{r}
-# ggplot(summaries, aes(mean_value, prop_correct)) +
-#   facet_wrap(~col_name, scales='free_x', ncol=2) +
-#   geom_point() +
-#   geom_line(data=preds, aes(x=x, y=predicted), color='firebrick') +
-#   theme_minimal()
-```
 
 # Image Analysis
 
@@ -392,6 +395,11 @@ The model doesn't have particularly high values of R^2. The accuracy isn't parti
 
 Start with just the proportion correct for each image, plot the top and bottom 8 images
 ```{r}
+# ------------------------------
+# Image Analysis
+# ------------------------------
+
+# Calculate the proportion correct for each image
 img_df <- full_df %>% 
   group_by(currImg) %>% 
   summarise(
@@ -400,10 +408,12 @@ img_df <- full_df %>%
   ) %>% 
   arrange(frac_correct)
 
+# Look at the distribution of the proportion correct by image
 ggplot(img_df, aes(frac_correct)) +
   geom_histogram(fill='dodgerblue', color='white') +
   theme_minimal()
 
+# Find the 9 easiest and hardest images
 exceptional_images <- bind_rows(
   head(img_df, 9),
   tail(img_df, 9)
@@ -418,6 +428,7 @@ exceptional_dots <- inner_join(full_dots, exceptional_images, by='currImg') %>%
     size = ifelse(cond=='size', 3, 1)
   )
 
+# Plot the hardest images
 hard_dots <- exceptional_dots %>% filter(frac_correct < 0.5)
 ggplot(hard_dots, aes(x, y, color=cond, size=size)) +
   facet_wrap(~currImg, ncol=3) +
@@ -430,12 +441,11 @@ ggplot(hard_dots, aes(x, y, color=cond, size=size)) +
   scale_y_continuous(breaks=c(0, 100)) +
   theme(panel.grid.minor = element_blank()) +
   guides(size='none')
-  # theme(legend.position='none')
-    
 ggsave('../presentation/figures/hard_images.png')
 
-hard_dots <- exceptional_dots %>% filter(frac_correct > 0.5) %>% arrange(cond)
-ggplot(hard_dots, aes(x, y, color=cond, size=size)) +
+
+easy_dots <- exceptional_dots %>% filter(frac_correct > 0.5) %>% arrange(cond)
+ggplot(easy_dots, aes(x, y, color=cond, size=size)) +
   facet_wrap(~currImg, ncol=3) +
   geom_point() +
   scale_size(range=c(1,2)) +
@@ -449,13 +459,16 @@ ggplot(hard_dots, aes(x, y, color=cond, size=size)) +
   # theme(legend.position='none')
     
 ggsave('../presentation/figures/easy_images.png')
+
 ```
 
 ## Model Analysis
 
 
 ```{r}
-# Get prediction data from full_df where we only have one intery per currImg
+# Here we take a look at the effect of the different factors on the odds of the subject correctly identifying the quadrant
+
+# Get prediction data from full_df where we only have one entry per currImg
 pred_df <- full_df %>% 
   group_by(currImg) %>% 
   summarise(
@@ -487,11 +500,16 @@ pred_df <- pred_df %>%
 # Take a look at the data for the top and bottom few images
 pred_df %>% head(9) %>% select(frac_correct, pred_prob, pred_log_odds, distToMiddleREVOdds, distToNearestOdds, n_in_quadrantOdds)
 pred_df %>% tail(9) %>% select(frac_correct, pred_prob, pred_log_odds, distToMiddleREVOdds, distToNearestOdds, n_in_quadrantOdds)
+
 ```
 
 
 ## Take a look at fitting a model where the extereme performers are no longer included
 ```{r}
+# ------------------------------
+# Subject Analysis
+# ------------------------------
+
 # Calculate subject accuracy
 subj_acc <- full_df %>% 
   group_by(subj) %>% 
@@ -501,10 +519,12 @@ subj_acc <- full_df %>%
 ggplot(subj_acc, aes(accuracy)) +
   geom_histogram(fill='dodgerblue', color='white') +
   theme_minimal()
+
 ```
 
 
 ```{r}
+# Filter out all subjects who are either really good or really bad
 thresh = 0.3
 subj_keep <- subj_acc %>% 
   filter(
@@ -514,8 +534,7 @@ subj_keep <- subj_acc %>%
 keep_df <- full_df %>% 
   inner_join(subj_keep, by='subj')
 
-# keep_df %>% head()
-
+# Fit a model without the "outlier" subjects
 no_outlier_model <- glmer(
   correct~distToMiddleREV + distToNearest + n_in_quadrant + isColSame + isSizeSame + isPulseSame + (1|subj), 
   data = keep_df, 
@@ -524,14 +543,16 @@ no_outlier_model <- glmer(
   control=glmerControl(optimizer='bobyqa')
   )
 summary(no_outlier_model)
+
 ```
 
 
 ## Subject Performance Bias
 
-Take a look to see if we had more bad or really good subjects working on some images which might lead us to believing that an image was easuer or harder than it actually was
+Take a look to see if we had more bad or really good subjects working on some images which might lead us to believing that an image was easier or harder than it actually was
 
 ```{r}
+# Merge the subject accuracy with the image data to make box plots to see if the easiest or hardest images had more good or bad subjects working on them.
 subj_img_df <- inner_join(
   full_df,
   exceptional_images %>% select(currImg, frac_correct, type),
@@ -543,7 +564,10 @@ ggplot(subj_img_df, aes(factor(currImg), accuracy, fill=type)) +
   facet_grid(rows=vars(type), scales='free') + 
   geom_boxplot() +
   theme_minimal()
+
 ```
 
+# Appendix
 
-
+```{r show-code, ref.label = all_labels(), echo = TRUE, eval = FALSE}
+```
