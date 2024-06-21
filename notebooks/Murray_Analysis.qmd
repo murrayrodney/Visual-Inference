@@ -253,34 +253,12 @@ r.squaredGLMM(model)
 
 ```
 
-## Checkout a transformation
-
-Try sqrt or log transformation of the n_in_quadrant to see if it makes a difference
-```{r}
-trans_formula <- correct ~ 
-  distToMiddleREV + 
-  log(n_in_quadrant) +
-  log(distToNearest) +
-  isColSame +
-  isSizeSame +
-  isPulseSame +
-  (1|subj)
-
-trans_model <- glmer(
-  formula=trans_formula,
-  data = full_df,
-  family = binomial,
-  )
-summary(trans_model)
-```
-
-
 ## Model Selection
 
 ### Dredge
 
 
-```{r}
+```{r, cache=T}
 # Use Dredge to find the best model
 options(na.action='na.fail')
 dredge_res <- dredge(model, fixed=c('isColSame', 'isPulseSame', 'isSizeSame'))
@@ -322,7 +300,8 @@ ggplot(dredge_df, aes(x=odds_ratio, y=term, color=has_n_in_quadrant)) +
   ) +
   scale_x_log10() +
   geom_vline(xintercept=1, color='black') + 
-  labs(x='Odds Ratio', y='Term', title='Illustration of Effect of N in Quadrant on other variables')
+  labs(x='Odds Ratio', y='Term', title='Illustration of Effect of N in Quadrant on other variables') +
+  theme_minimal()
 ggsave('../presentation/figures/dredge_estimates.png')
 ```
 
@@ -389,15 +368,15 @@ boot_conf_plot <- boot_confint %>%
   arrange(term_class, term_label)
 
 # Plot the model estimate along with the confidence intervals
-ggplot(boot_conf_plot, aes(term_label, y=exp(estimate), ymin=exp(conf.low), ymax=exp(conf.high))) +
+ggplot(boot_conf_plot, aes(term, y=exp(estimate), ymin=exp(conf.low), ymax=exp(conf.high))) +
   geom_point() +
   geom_errorbar(width=0.25) +
   geom_hline(yintercept=1, color='black') +
   scale_y_log10(breaks=c(0.5, 1, 4), limits=c(0.5, 4)) +
-  scale_x_discrete(limits=c('Is Size the Same', 'Is Color the Same', 'Is Pulse the Same', 'Distance to Middle', 'Distance to Nearest', 'N in Quadrant')) +
+  scale_x_discrete(limits=c('isSizeSame', 'isColSame', 'isPulseSame', 'distToMiddleREV', 'distToNearest', 'n_in_quadrant')) +
   labs(y='Odds Ratio', x='Term') +
   coord_flip() +
-  theme_minimal(base_size=18)
+  theme_minimal()
 ggsave('../presentation/figures/effect_conf_ints.png')
 
 ```
@@ -638,6 +617,16 @@ ggplot(subj_img_df, aes(factor(currImg), accuracy, fill=type)) +
 img_df %>% 
   kable(col.names=c('Image ID', 'N Subjects', 'Proportion Correct'))
 
+```
+
+```{r}
+as.data.frame(dredge_res) %>% 
+  select(-logLik, -df, -weight, -1) %>% 
+  mutate(
+    AICc = round(AICc, 0),
+    delta = round(delta, 1),
+  ) %>% 
+  kable(digits=3)
 ```
 
 
